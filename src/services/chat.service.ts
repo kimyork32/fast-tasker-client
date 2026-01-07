@@ -4,7 +4,7 @@ import { Stomp, CompatClient } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 
 const API_PREFIX = '/api/v1/conversations';
-const SOCKET_URL = "http://localhost:8080/ws";
+const SOCKET_URL = "http://localhost:8082/ws";
 
 let stompClient: CompatClient | null = null;
 

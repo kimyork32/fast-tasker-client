@@ -7,8 +7,8 @@ import SockJS from 'sockjs-client';
 let stompClient: Client | null = null;
 
 // La URL de tu endpoint de WebSocket configurado en Spring
-const API_PREFIX = '/api/v1/tasker';
-const WEBSOCKET_URL = 'http://localhost:8080/ws'; 
+const API_PREFIX = '/api/v1';
+const WEBSOCKET_URL = 'http://localhost:8082/ws'; 
 
 
 /**

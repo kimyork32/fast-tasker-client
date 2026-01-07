@@ -1,5 +1,5 @@
 // URL de tu backend. ¡Debería estar en .env.local!
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8082';
 
 /**
  * Cliente 'fetch' centralizado para hablar con tu API de Spring Boot

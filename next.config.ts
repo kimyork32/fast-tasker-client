@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:8080/api/:path*', // proxy for backend, chages in production
+        destination: 'http://localhost:8082/api/:path*', // proxy for backend, chages in production
       }
     ];
   }
