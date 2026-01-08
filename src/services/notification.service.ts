@@ -8,7 +8,7 @@ let stompClient: Client | null = null;
 
 // La URL de tu endpoint de WebSocket configurado en Spring
 const API_PREFIX = '/api/v1';
-const WEBSOCKET_URL = 'http://localhost:8082/ws'; 
+const WEBSOCKET_URL = 'http://localhost:8081/ws'; 
 
 
 /**
