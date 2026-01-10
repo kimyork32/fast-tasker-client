@@ -1,7 +1,12 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ConversationSummary, Message, SendMessageRequest, ChatProfileResponse } from '@/lib/types';
+import { 
+  ConversationSummary, 
+  Message, 
+  SendMessageRequest, 
+  ChatProfileResponse 
+} from '@/lib/types';
 import { 
   getInbox, 
   getMessages, 
@@ -82,12 +87,32 @@ export default function ChatPage() {
   };
 
   const handleNewMessage = (newMessage: Message) => {
-    setMessages((prev) => [...prev, newMessage]);
+    setMessages((prev) => {
+      // 1. Evitar duplicados si el mensaje ya existe (por ID real)
+      if (prev.some(m => m.id === newMessage.id)) return prev;
+
+      // 2. Buscar mensaje optimista correspondiente (ID temporal + mismo contenido + mismo sender)
+      const optimisticIndex = prev.findIndex(m => 
+        m.id.startsWith('temp-') && 
+        m.senderId === newMessage.senderId &&
+        m.content.text === newMessage.content.text
+      );
+
+      if (optimisticIndex !== -1) {
+        // Reemplazar el mensaje optimista con el real (confirmación del servidor)
+        const newMessages = [...prev];
+        newMessages[optimisticIndex] = newMessage;
+        return newMessages;
+      }
+
+      // 3. Si no es duplicado ni reemplazo, agregar al final
+      return [...prev, newMessage];
+    });
   };
 
 
   const handleSendMessage = () => {
-    if (!inputText.trim() || !activeChatId) return;
+    if (!inputText.trim() || !activeChatId || !currentUser) return;
 
     const payload: SendMessageRequest = {
       conversationId: activeChatId,
@@ -97,6 +122,22 @@ export default function ChatPage() {
       }
     };
     
+    // --- ACTUALIZACIÓN OPTIMISTA ---
+    // Mostramos el mensaje inmediatamente para que el usuario vea feedback instantáneo
+    const optimisticMessage: Message = {
+      id: `temp-${Date.now()}`, // ID temporal hasta que recarguemos el historial
+      conversationId: activeChatId,
+      senderId: currentUser.id,
+      recipientId: activeParticipant?.id || 'unknown',
+      content: {
+        text: inputText,
+        attachmentUrl: null
+      },
+      sentAt: new Date().toISOString(),
+      read: false
+    };
+    setMessages((prev) => [...prev, optimisticMessage]);
+
     sendChatMessage(payload);
     setInputText("");
   };

@@ -1,7 +1,7 @@
 // src/components/notifications/NotificationBell.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Bell } from 'lucide-react';
 import {
   getNotifications,
@@ -17,46 +17,69 @@ export function NotificationBell() {
   const [notifications, setNotifications] = useState<NotificationResponse[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
+  
+  // Usamos useRef para evitar reconexiones dobles en modo estricto de React
+  const isConnected = useRef(false);
 
-  // Obtener userId y token para las notificaciones
   useEffect(() => {
     const token = Cookies.get('jwtToken');
-    if (token) {
-      try {
-        const decodedToken: { sub: string } = jwtDecode(token);
-        const userIdFromToken = decodedToken.sub;
-        setUserId(userIdFromToken);
+    if (!token) return;
 
-        // Conectar al WebSocket
-        connectWebSocket(userIdFromToken, (newNotification) => {
-          setNotifications(prev => [newNotification, ...prev]);
-          setUnreadCount(prev => prev + 1);
-        }, token);
-
-      } catch (error) {
-        console.error("Error al decodificar token o conectar a WebSocket:", error);
-      }
+    let userId: string;
+    try {
+      const decodedToken: { sub: string; taskerId: string } = jwtDecode(token);
+      userId = decodedToken.taskerId;
+    } catch (error) {
+      console.error("Error al decodificar token:", error);
+      return;
     }
 
-    // Desconectar al desmontar el componente
+    // 1. Definir qué hacer cuando llega una notificación en tiempo real
+    const handleLiveNotification = (newNotification: NotificationResponse) => {
+      setNotifications((prev) => {
+        // Evitar duplicados (por si la API REST y el WS traen la misma casi al mismo tiempo)
+        if (prev.some(n => n.id === newNotification.id)) return prev;
+        return [newNotification, ...prev];
+      });
+      setUnreadCount((prev) => prev + 1);
+    };
+
+    // 2. Conectar WebSocket (si no está ya conectado)
+    if (!isConnected.current) {
+      connectWebSocket(userId, handleLiveNotification);
+      isConnected.current = true;
+    }
+
+    // 3. Obtener historial inicial (REST API)
+    getNotifications()
+      .then((history) => {
+        setNotifications((prevCurrentState) => {
+          // AQUÍ ESTÁ LA CLAVE: Fusionar, no reemplazar.
+          // 'prevCurrentState' contiene las notificaciones que llegaron por WS mientras cargaba la API.
+          
+          // Creamos un Set con los IDs actuales para filtrar rápido
+          const currentIds = new Set(prevCurrentState.map(n => n.id));
+          
+          // Solo agregamos del historial las que NO estén ya en el estado
+          const uniqueHistory = history.filter(n => !currentIds.has(n.id));
+          
+          // Ponemos las actuales (WS) primero, seguidas del historial
+          return [...prevCurrentState, ...uniqueHistory];
+        });
+
+        // Actualizar contador. Asumimos que history trae todo.
+        // Si tu backend tiene un campo 'isRead', úsalo: history.filter(n => !n.isRead).length
+        // Si no, sumamos al contador actual.
+        setUnreadCount(prev => prev + history.length); 
+      })
+      .catch(console.error);
+
+    // Cleanup al desmontar
     return () => {
       disconnectWebSocket();
+      isConnected.current = false;
     };
-  }, []);
-
-  // Cargar notificaciones iniciales
-  useEffect(() => {
-    if (userId) {
-      getNotifications()
-        .then(data => {
-          setNotifications(data);
-          // Aquí puedes añadir lógica para contar solo las no leídas si tu API lo permite
-          setUnreadCount(data.length); 
-        })
-        .catch(console.error);
-    }
-  }, [userId]);
+  }, []); // Array vacío: se ejecuta solo al montar el componente
 
   return (
     <div className="relative">
@@ -77,9 +100,7 @@ export function NotificationBell() {
               notifications.map(notif => (
                 <div key={notif.id} className="p-3 border-b hover:bg-gray-50 cursor-pointer">
                   <p className="text-sm">
-                    {
-                      // Construye un mensaje basado en el tipo de notificación
-                      notif.type === 'OFFER_ACCEPTED'
+                    {notif.type === 'OFFER_ACCEPTED'
                         ? `¡Tu oferta para la tarea ha sido aceptada!`
                         : notif.type === 'NEW_MESSAGE'
                         ? `Has recibido un nuevo mensaje.`
@@ -87,8 +108,8 @@ export function NotificationBell() {
                     }
                   </p>
                   <p className="text-xs text-gray-400 mt-1">
-                    {/* Asegúrate de que el nombre de la propiedad coincida con el backend ('createAt') */}
-                    {new Date(notif.createAt).toLocaleString('es-ES', {
+                    {/* Nota: Verifica si tu backend envía 'createAt' o 'createdAt' */}
+                    {new Date(notif.createAt || Date.now()).toLocaleString('es-ES', {
                       day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit'
                     })}
                   </p>

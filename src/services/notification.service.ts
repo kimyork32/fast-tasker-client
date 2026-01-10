@@ -2,13 +2,11 @@
 import { apiClient } from '@/lib/apiClient';
 import { NotificationResponse } from '@/lib/types';
 import { Client, IMessage } from '@stomp/stompjs';
-import SockJS from 'sockjs-client';
 
 let stompClient: Client | null = null;
 
-// La URL de tu endpoint de WebSocket configurado en Spring
 const API_PREFIX = '/api/v1';
-const WEBSOCKET_URL = 'http://localhost:8081/ws'; 
+const WEBSOCKET_URL = 'ws://localhost:8081/ws/notifications/websocket'; 
 
 
 /**
@@ -26,8 +24,7 @@ export const getNotifications = (): Promise<NotificationResponse[]> => {
 
 export const connectWebSocket = (
   userId: string, 
-  onNotification: (notification: NotificationResponse) => void,
-  authToken: string
+  onNotification: (notification: NotificationResponse) => void
 ) => {
     console.log("connectWebSocket called");
   if (stompClient && stompClient.active) {
@@ -35,22 +32,32 @@ export const connectWebSocket = (
     return;
   }
 
-  // La forma correcta de instanciar el cliente STOMP con SockJS
-  const socket = new SockJS(WEBSOCKET_URL);
-  stompClient = new Client();
-  stompClient.webSocketFactory = () => socket;
-  stompClient.connectHeaders = {
-    'Authorization': `Bearer ${authToken}`
-  };
-  stompClient.debug = (str) => {
-    console.log('STOMP: ' + str);
-  };
-  stompClient.reconnectDelay = 5000;
+  const token = document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('jwtToken='))?.split('=')[1];
+  
+  if (!token) {
+    console.error("No se encontró el token JWT. No se puede conectar a notificaciones.");
+    return;
+  }
+
+  stompClient = new Client({
+    brokerURL: WEBSOCKET_URL,
+    connectHeaders: {
+      Authorization: `Bearer ${token}`
+    },
+    debug: (str) => {
+      console.log('STOMP: ' + str);
+    },
+    reconnectDelay: 5000,
+  });
 
   // Cuando la conexión es exitosa
   stompClient.onConnect = (frame) => {
     console.log('Conectado al WebSocket: ' + frame);
-    stompClient?.subscribe(`/user/topic/notifications`, (message: IMessage) => {
+    
+    const topic = `/topic/notifications/${userId}`;
+
+    // Usamos el userId (taskerId) para suscribirnos a un tópico específico y único
+    stompClient?.subscribe(topic, (message: IMessage) => {
 
       console.log('DEBUG: Mensaje WebSocket recibido (raw):', message.body);
       const notification: NotificationResponse = JSON.parse(message.body);
